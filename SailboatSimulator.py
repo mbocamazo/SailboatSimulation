@@ -16,7 +16,7 @@ import numpy as np
 class WorldModel:
     """encodes simulator world state"""
     def __init__(self,windspeed,windheading):
-        self.boat1 = Boat(20,200,200,(100,100,100)) #later include boat list for support of multiple boats
+        self.boat1 = Boat(25,200,200,(100,100,100)) #later include boat list for support of multiple boats
         self.windspeed = windspeed
         self.windheading = windheading
         self.clock = pygame.time.Clock()
@@ -74,9 +74,9 @@ class PyGameWindowView:
         pygame.display.update()
     
     def draw_boat(self,boat):
-        bow = (boat.xpos,boat.ypos)
-        starboard_stern = (boat.xpos+boat.length*cos(pi-(boat.heading+pi/8.0)),boat.ypos+boat.length*sin(pi-(boat.heading+pi/8.0)))
-        port_stern = (boat.xpos+boat.length*cos(pi-(boat.heading-pi/8.0)),boat.ypos+boat.length*sin(pi-(boat.heading-pi/8.0)))
+        bow = (boat.xpos+boat.length/2.0*cos(boat.heading),boat.ypos+boat.length/2.0*sin(boat.heading))
+        starboard_stern = (boat.xpos+boat.length/2.0*cos(boat.heading+pi*5.0/6),boat.ypos+boat.length/2.0*sin(boat.heading+pi*5.0/6))
+        port_stern = (boat.xpos+boat.length/2.0*cos(boat.heading+pi*7.0/6),boat.ypos+boat.length/2.0*sin(boat.heading+pi*7.0/6))
         pygame.draw.line(self.screen, boat.color, bow, starboard_stern, 3)
         pygame.draw.line(self.screen, boat.color, bow, port_stern, 2)
         pygame.draw.line(self.screen, boat.color, starboard_stern, port_stern, 1)
