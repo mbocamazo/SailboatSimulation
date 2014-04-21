@@ -16,12 +16,14 @@ import numpy as np
 class WorldModel:
     """encodes simulator world state"""
     def __init__(self,windspeed,windheading):
-        self.boat1 = Boat(10,200,200,(100,100,100)) #later include boat list for support of multiple boats
+        self.boat1 = Boat(20,200,200,(100,100,100)) #later include boat list for support of multiple boats
         self.windspeed = windspeed
         self.windheading = windheading
-    
+        self.clock = pygame.time.Clock()
+
     def update_model(self):
-        self.boat1.update(1) #later include clock module to determine dt
+        dt = self.clock.tick()
+        self.boat1.update(dt/1000.0)
     
 class Boat:
     """encodes information about the boat"""
@@ -39,25 +41,25 @@ class Boat:
         self.vy = 0
         self.heading = 0 #note: not redundant with vx, vy; in simple model could be
         self.angularVelocity = 0
+        self.forward_speed = 0
         self.color = color #should be a three-tuple
         
     def update(self,dt):
         self.trim()
-        self.calculate_physics()
-        self.move(dt)
-    
-    def move(self,dt):
-        self.xpos += self.vx*dt
-        self.ypos += self.vy*dt
-        self.heading += self.angularVelocity*dt
-        
-    def calculate_physics(self):
-        """updates kinematics"""
-        pass
+        self.kinematics(dt)
     
     def trim(self):
         """readjust sails and rudder to suggestions if possible"""
         pass
+    
+    def kinematics(self,dt):
+        """updates kinematics"""
+        self.heading += self.angularVelocity*dt
+        self.vx = self.forward_speed*cos(self.heading)
+        self.vy = self.forward_speed*sin(self.heading)
+        self.xpos += self.vx*dt
+        self.ypos += self.vy*dt
+        
     
 class PyGameWindowView:
     """encodes view of simulation"""
@@ -67,11 +69,19 @@ class PyGameWindowView:
     
     def draw(self):
         self.screen.fill(pygame.Color(255,255,255))
+        #later include for loop of boats
         self.draw_boat(self.model.boat1)
         pygame.display.update()
     
     def draw_boat(self,boat):
-        pygame.draw.rect(self.screen,pygame.Color(boat.color[0],boat.color[1],boat.color[2]),pygame.Rect(boat.xpos,boat.ypos,boat.length*2,boat.length))
+        bow = (boat.xpos,boat.ypos)
+        starboard_stern = (boat.xpos+boat.length*cos(pi-(boat.heading+pi/8.0)),boat.ypos+boat.length*sin(pi-(boat.heading+pi/8.0)))
+        port_stern = (boat.xpos+boat.length*cos(pi-(boat.heading-pi/8.0)),boat.ypos+boat.length*sin(pi-(boat.heading-pi/8.0)))
+        pygame.draw.line(self.screen, boat.color, bow, starboard_stern, 3)
+        pygame.draw.line(self.screen, boat.color, bow, port_stern, 2)
+        pygame.draw.line(self.screen, boat.color, starboard_stern, port_stern, 1)
+
+#        pygame.draw.rect(self.screen,pygame.Color(boat.color[0],boat.color[1],boat.color[2]),pygame.Rect(boat.xpos,boat.ypos,boat.length*2,boat.length))
 
 class PyGameController:
     """handles user inputs and communicates with model"""
@@ -83,11 +93,40 @@ class PyGameController:
     def handle_keystroke_event(self,event): 
         """builds and upgrades towers"""
         if event.type == KEYDOWN:
-            if event.key == pygame.K_r:
-                self.model.boat1.vx += 1                
+            #remember that the directions are reversed in view
+            if event.key == pygame.K_LEFT:
+                self.model.boat1.vx += -10      
 
-            if event.key == pygame.K_f:
-                self.model.boat1.vx += -1            
+            if event.key == pygame.K_RIGHT:
+                self.model.boat1.vx += 10          
+                
+            if event.key == pygame.K_UP:
+                self.model.boat1.vy += -10              
+
+            if event.key == pygame.K_DOWN:
+                self.model.boat1.vy += 10  
+                
+            if event.key == pygame.K_w:
+                self.model.boat1.forward_speed += 10
+                
+            if event.key == pygame.K_s:
+                self.model.boat1.forward_speed += -10  
+                
+            if event.key == pygame.K_d:
+                self.model.boat1.angularVelocity += 1  
+                
+            if event.key == pygame.K_a:
+                self.model.boat1.angularVelocity += -1
+                
+            if event.key == pygame.K_b:
+                self.model.boat1.xpos = 200
+                self.model.boat1.ypos = 200
+                self.model.boat1.vx = 0
+                self.model.boat1.vy = 0
+                self.model.boat1.heading = 0
+                self.model.boat1.angularVelocity = 0
+                self.model.boat1.forward_speed = 0
+                
 
 if __name__ == '__main__':
     pygame.init()
@@ -105,5 +144,5 @@ if __name__ == '__main__':
             controller.handle_keystroke_event(event)
         model.update_model()
         view.draw()
-        time.sleep(.001)
+        time.sleep(.01)
     pygame.quit()
