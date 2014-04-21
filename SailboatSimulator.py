@@ -16,7 +16,7 @@ import numpy as np
 class WorldModel:
     """encodes simulator world state"""
     def __init__(self,windspeed,windheading):
-        self.boat1 = Boat(10,200,200) #later include boat list for support of multiple boats
+        self.boat1 = Boat(10,200,200,(100,100,100)) #later include boat list for support of multiple boats
         self.windspeed = windspeed
         self.windheading = windheading
     
@@ -67,11 +67,11 @@ class PyGameWindowView:
     
     def draw(self):
         self.screen.fill(pygame.Color(255,255,255))
-        
+        self.draw_boat(self.model.boat1)
         pygame.display.update()
     
     def draw_boat(self,boat):
-        pygame.draw.rect(self.screen,pygame.Color())
+        pygame.draw.rect(self.screen,pygame.Color(boat.color[0],boat.color[1],boat.color[2]),pygame.Rect(boat.xpos,boat.ypos,boat.length*2,boat.length))
 
 class PyGameController:
     """handles user inputs and communicates with model"""
@@ -84,16 +84,16 @@ class PyGameController:
         """builds and upgrades towers"""
         if event.type == KEYDOWN:
             if event.key == pygame.K_r:
-                self.model.gold -= 10                
+                self.model.boat1.vx += 1                
 
             if event.key == pygame.K_f:
-                self.model.gold -= 5                
+                self.model.boat1.vx += -1            
 
 if __name__ == '__main__':
     pygame.init()
     size = (520,500)
     screen = pygame.display.set_mode(size)
-    model = WorldModel()
+    model = WorldModel(0,0)
     view = PyGameWindowView(model,screen)
     controller = PyGameController(model,view)
     running = True
