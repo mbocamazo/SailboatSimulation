@@ -16,7 +16,7 @@ import numpy as np
 class WorldModel:
     """encodes simulator world state"""
     def __init__(self,windspeed,windheading):
-        self.boat1 = Boat(40,200,200,(100,100,100)) #later include boat list for support of multiple boats
+        self.boat1 = Boat(40,400,400,(100,100,100)) #later include boat list for support of multiple boats
         self.wind = Wind(windspeed,windheading)
         self.clock = pygame.time.Clock()
         self.relwind = abs(self.wind.windheading-self.boat1.heading)%(2.0*pi)
@@ -64,6 +64,14 @@ class Boat:
         self.forward_speed = 0
         self.color = color #should be a three-tuple
         self.wind_over_port = True 
+        self.log_coefficient = 0.25
+        self.lambda_1 = 0.1 #can't be named lambda, reserved
+        self.strength_Main = 0.65
+        self.strength_Jib = 1-self.strength_Main
+        
+        self.k = 10 #velocity scaling for the scale
+        
+        self.disp_k =10 #scaling for the output
         
     def update(self,dt,model):
         self.heading = self.heading % (2.0*pi) #sanitization
@@ -91,15 +99,51 @@ class Boat:
     
     def kinematics(self,dt,model):
         """updates kinematics"""
-        self.heading += self.angularVelocity*dt
+
+        
+        #forward sail aspect
+        Sr = shadow_ratio(model.relwindcomp)
+        PrMain = power_ratio(self.MainPos,model.relwindcomp)*self.strength_Main
+        PrJib = power_ratio(self.JibPos,model.relwindcomp)*self.strength_Jib
+        Dr = drag_ratio(self.RudderPos)
+        Vmax = Vtmax(model.relwindcomp,self.k)*(PrMain+(1-Sr)*PrJib)/(2.0-Sr)*Dr
+        self.forward_speed += self.lambda_1*(Vmax-self.forward_speed)*dt #decay to the max, acceleration term
+        
+        #conversion to cartesian
         self.vx = self.forward_speed*cos(self.heading)
         self.vy = self.forward_speed*sin(self.heading)
-        self.vx += model.wind.windspeed*cos(model.wind.windheading)
-        self.vy += model.wind.windspeed*sin(model.wind.windheading)
-
-        self.xpos += self.vx*dt
-        self.ypos += self.vy*dt
         
+        #floating log aspect (in cartesian, rather than doing vector addition, which is also possible)    
+        self.vx += model.wind.windspeed*cos(model.wind.windheading)*self.log_coefficient
+        self.vy += model.wind.windspeed*sin(model.wind.windheading)*self.log_coefficient
+        
+        #finally, updates
+        self.heading += self.angularVelocity*dt
+        self.xpos += self.vx*dt*self.disp_k
+        self.ypos += self.vy*dt*self.disp_k
+        
+def Vtmax(theta,k):
+    """theoretical max for a relative wind angle.  Doesn't belong to the boat class, but could!"""
+    a = -0.2
+    b = 0.8
+    c = -0.2
+    Vtmax = a*theta+b*theta**2+c*theta**3
+    return Vtmax*k
+    
+def power_ratio(SailP,relwindcomp):
+    """power given sail position, assuming relwindcomp/pi is best"""
+    return sin(pi**2.0/(4*relwindcomp)*SailP)  
+    
+def shadow_ratio(relwindcomp):
+    """shadow that falls on the jib given the wind"""
+    if relwindcomp >= pi/2.0:
+        return 0
+    else:
+        return (2.0/pi*relwindcomp)-1
+        
+def drag_ratio(RudderPos):
+    """coefficient on velocity from the drag given the rudder pos"""
+    return 1 - 0.9*sin(abs(RudderPos)) #given current state, this means that at pi/4, effectively 1/4 as fast (1-0.9*sin(1))
     
 class PyGameWindowView:
     """encodes view of simulation"""
@@ -222,7 +266,7 @@ class PyGameController:
                 
 if __name__ == '__main__':
     pygame.init()
-    size = (520,500)
+    size = (820,800)
     screen = pygame.display.set_mode(size)
     model = WorldModel(0,0) #initial windspeed, windheading
     view = PyGameWindowView(model,screen)
