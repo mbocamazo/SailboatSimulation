@@ -22,7 +22,7 @@ class WorldModel:
         self.relwind = abs(self.wind.windheading-self.boat1.heading)%(2.0*pi)
         if self.relwind > pi:
             self.relwind = 2.0*pi-self.relwind
-        self.relwindcomp = pi-self.relwind
+        self.relwindcomp = pi-self.relwind #the complement
             
     def update_model(self):
         dt = self.clock.tick()/1000.0
@@ -80,6 +80,11 @@ class Boat:
             self.JibSuggestion = 0
         if self.JibSuggestion >= 1:
             self.JibSuggestion = 1
+        if self.RudderSuggestion >=1:
+            self.RudderSuggestion = 1
+        elif self.RudderSuggestion <= -1:
+            self.RudderSuggestion = -1
+        self.RudderPos = self.RudderSuggestion
         self.MainPos = min([self.MainSuggestion,model.relwindcomp*2.0/pi,1]) #in foolish ratio units, [0 1], 1 being full out, 90 degrees
         self.JibPos = min([self.JibSuggestion,model.relwindcomp*2.0/pi,1])
         self.wind_over_port = ((model.wind.windheading-self.heading)%(2.0*pi))<pi #a boolean
@@ -124,6 +129,12 @@ class PyGameWindowView:
             switch = 1
         main_end = (boat.xpos-boat.length/2.0*cos(boat.heading+boat.MainPos*pi/2.0*switch), boat.ypos-boat.length/2.0*sin(boat.heading+boat.MainPos*pi/2.0*switch))
         pygame.draw.line(self.screen, (0,255,0), (boat.xpos,boat.ypos), main_end, 2)
+        jib_end = (bow[0]-boat.length/3.0*cos(boat.heading+boat.JibPos*pi/2.0*switch),bow[1]-boat.length/3.0*sin(boat.heading+boat.JibPos*pi/2.0*switch))
+        pygame.draw.line(self.screen, (0,255,0), bow, jib_end, 2)
+        rudder_origin = (mean((starboard_stern[0],port_stern[0])),mean((starboard_stern[1],port_stern[1])))
+        rudder_end = (rudder_origin[0]-boat.length/3.0*cos(boat.heading+boat.RudderPos*pi/4.0),rudder_origin[1]-boat.length/3.0*sin(boat.heading+boat.RudderPos*pi/4.0))
+        pygame.draw.line(self.screen, (0,0,0), rudder_origin, rudder_end, 3)
+
         
 #        pygame.draw.rect(self.screen,pygame.Color(boat.color[0],boat.color[1],boat.color[2]),pygame.Rect(boat.xpos,boat.ypos,boat.length*2,boat.length))
 
@@ -202,6 +213,12 @@ class PyGameController:
                 self.model.boat1.JibSuggestion += 0.1
             if event.key == pygame.K_d:
                 self.model.boat1.JibSuggestion += -0.1
+                
+            #qa control rudder
+            if event.key == pygame.K_q:
+                self.model.boat1.RudderSuggestion += 0.1
+            if event.key == pygame.K_a:
+                self.model.boat1.RudderSuggestion += -0.1              
                 
 if __name__ == '__main__':
     pygame.init()
