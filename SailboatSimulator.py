@@ -65,11 +65,14 @@ class Boat:
         self.forward_speed = 0
         self.color = color #should be a three-tuple
         self.wind_over_port = True 
-        self.log_coefficient = 0.25
+        self.log_coefficient = 0.1
         self.lambda_1 = 0.1 #can't be named lambda, reserved
-        self.lambda_2 = 0.1 #decay rate for angular velocity, to zero, way of encoding drag
+        self.lambda_2 = 0.4 #decay rate for angular velocity, to zero, way of encoding drag
         self.strength_Main = 0.65
         self.strength_Jib = 1-self.strength_Main
+        self.debug_list = (0,0)
+        self.main_angle = 0
+        self.jib_angle = 0
         
         self.k = 2 #velocity scaling for the wind
         self.kw = 0.3 #angular velocity scaling for the torque from the rudder
@@ -120,15 +123,16 @@ class Boat:
         Tr = -self.kw*log(abs(self.forward_speed)+1)*self.RudderPos #all of these ratios are made up 
         
         #sail torque aspect
-        Ts = self.q*self.strength_Main*sin(model.relwindcomp-self.heading+self.MainPos)
-        Ts+=-self.q*self.strength_Jib*sin(model.relwindcomp-self.heading+self.JibPos)
- 
+        Ts = -self.q*self.strength_Main*sin(self.main_angle-model.wind.windheading)*sqrt(model.wind.windspeed)
+        Ts = self.q*self.strength_Jib*sin(self.jib_angle-model.wind.windheading)*sqrt(model.wind.windspeed)
 
         #log torque aspect?
-                
-        self.angularVelocity += sign(self.angularVelocity)*-self.angularVelocity**2*self.lambda_2*dt #effectively drag
+        
+        angular_drag = -sign(self.angularVelocity)*self.angularVelocity**2*self.lambda_2 #effectively drag
+        self.angularVelocity += angular_drag*dt
         self.angularVelocity += Tr*dt
         self.angularVelocity += Ts*dt
+        
         
         #forward sail aspect
         Sr = shadow_ratio(model.relwindcomp)
@@ -138,11 +142,13 @@ class Boat:
         Vmax = Vtmax(model.relwindcomp,self.k)*(PrMain+(1-Sr)*PrJib)/(2.0-Sr)*Dr
         self.forward_speed += self.lambda_1*(Vmax-self.forward_speed)*dt #decay to the max, acceleration term
         
+        self.debug_list = (Ts, angular_drag, Vtmax(model.relwindcomp,self.k), Vmax)
+
         #conversion to cartesian
         self.vx = self.forward_speed*cos(self.heading)
         self.vy = self.forward_speed*sin(self.heading)
         
-        #floating log aspect (in cartesian, rather than doing vector addition, which is also possible)    
+#        floating log aspect (in cartesian, rather than doing vector addition, which is also possible)    
         self.vx += model.wind.windspeed*cos(model.wind.windheading)*self.log_coefficient
         self.vy += model.wind.windspeed*sin(model.wind.windheading)*self.log_coefficient
         
@@ -191,16 +197,16 @@ class PyGameWindowView:
         pygame.display.update()
     
     def draw_boat(self,boat):
-        try:
-            bow = (boat.xpos+boat.length/2.0*cos(boat.heading),boat.ypos+boat.length/2.0*sin(boat.heading))
-            starboard_stern = (boat.xpos+boat.length/2.0*cos(boat.heading+pi*5.0/6),boat.ypos+boat.length/2.0*sin(boat.heading+pi*5.0/6))
-            port_stern = (boat.xpos+boat.length/2.0*cos(boat.heading+pi*7.0/6),boat.ypos+boat.length/2.0*sin(boat.heading+pi*7.0/6))
-            pygame.draw.line(self.screen, boat.color, bow, starboard_stern, 3)
-            pygame.draw.line(self.screen, boat.color, bow, port_stern, 2)
-            pygame.draw.line(self.screen, boat.color, starboard_stern, port_stern, 1)
-        except:
-            print boat.heading
-            print boat.angularVelocity
+#        try:
+        bow = (boat.xpos+boat.length/2.0*cos(boat.heading),boat.ypos+boat.length/2.0*sin(boat.heading))
+        starboard_stern = (boat.xpos+boat.length/2.0*cos(boat.heading+pi*5.0/6),boat.ypos+boat.length/2.0*sin(boat.heading+pi*5.0/6))
+        port_stern = (boat.xpos+boat.length/2.0*cos(boat.heading+pi*7.0/6),boat.ypos+boat.length/2.0*sin(boat.heading+pi*7.0/6))
+        pygame.draw.line(self.screen, boat.color, bow, starboard_stern, 3)
+        pygame.draw.line(self.screen, boat.color, bow, port_stern, 2)
+        pygame.draw.line(self.screen, boat.color, starboard_stern, port_stern, 1)
+#        except:
+#            print boat.heading
+#            print boat.angularVelocity
         if boat.wind_over_port:  #non-intuitive reversal needs to be explained
             switch = -1
         else:
@@ -212,6 +218,8 @@ class PyGameWindowView:
         rudder_origin = (mean((starboard_stern[0],port_stern[0])),mean((starboard_stern[1],port_stern[1])))
         rudder_end = (rudder_origin[0]-boat.length/3.0*cos(boat.heading+boat.RudderPos*pi/4.0),rudder_origin[1]-boat.length/3.0*sin(boat.heading+boat.RudderPos*pi/4.0))
         pygame.draw.line(self.screen, (0,0,0), rudder_origin, rudder_end, 3)
+        boat.main_angle = atan2(main_end[1]-boat.ypos,main_end[0]-boat.xpos)
+        boat.jib_angle = atan2(jib_end[1]-bow[1],jib_end[0]-bow[0])
 
     def draw_wind_vane(self,wind):
         origin = (30,30)
@@ -224,7 +232,7 @@ class PyGameWindowView:
         myfont = pygame.font.SysFont("monospace", 12, bold = True)
         text = myfont.render("Relative Wind: "+str(self.model.relwind), 1, (0,0,0))
         text_2 = myfont.render("Boat angularVelocity: "+str(self.model.boat1.angularVelocity), 1, (0,0,0))
-        text_3 = myfont.render("Boat Heading: "+str(self.model.boat1.heading), 1, (0,0,0))
+        text_3 = myfont.render("Boat debug: "+str(self.model.boat1.debug_list), 1, (0,0,0))
         self.screen.blit(text, (100,20))
         self.screen.blit(text_2, (100, 40))
         self.screen.blit(text_3, (100, 60))
@@ -289,11 +297,17 @@ class PyGameController:
             if event.key == pygame.K_d:
                 self.model.boat1.JibSuggestion += -0.1
                 
-            #qa control rudder
+            #qa control rudder, zxc throw it
             if event.key == pygame.K_q:
                 self.model.boat1.RudderSuggestion += 0.1
             if event.key == pygame.K_a:
-                self.model.boat1.RudderSuggestion += -0.1              
+                self.model.boat1.RudderSuggestion += -0.1
+            if event.key == pygame.K_z:
+                self.model.boat1.RudderSuggestion = -1
+            if event.key == pygame.K_x:
+                self.model.boat1.RudderSuggestion = 0
+            if event.key == pygame.K_c:
+                self.model.boat1.RudderSuggestion = 1
                 
 if __name__ == '__main__':
     pygame.init()
