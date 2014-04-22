@@ -33,6 +33,7 @@ class WorldModel:
         self.boat1.update(dt,model)
         self.wind.update(dt)
         
+        
 class Wind:
     """encodes information about the wind"""
     def __init__(self,windspeed,windheading):
@@ -66,17 +67,28 @@ class Boat:
         self.wind_over_port = True 
         self.log_coefficient = 0.25
         self.lambda_1 = 0.1 #can't be named lambda, reserved
+        self.lambda_2 = 0.1 #decay rate for angular velocity, to zero, way of encoding drag
         self.strength_Main = 0.65
         self.strength_Jib = 1-self.strength_Main
         
-        self.k = 10 #velocity scaling for the scale
+        self.k = 2 #velocity scaling for the wind
+        self.kw = 0.3 #angular velocity scaling for the torque from the rudder
+        self.q = 1 #ang vel scaling for torque from the scales
         
-        self.disp_k =10 #scaling for the output
+        self.disp_k =1 #scaling for the output
         
     def update(self,dt,model):
         self.heading = self.heading % (2.0*pi) #sanitization
         self.trim(model)
         self.kinematics(dt,model)
+        if self.xpos > 820:
+            self.xpos = 0
+        if self.xpos < 0:
+            self.xpos = 820
+        if self.ypos > 800:
+            self.ypos = 0
+        if self.ypos < 0:
+            self.ypos = 800
     
     def trim(self,model):
         """readjust sails and rudder to suggestions if possible"""
@@ -99,7 +111,24 @@ class Boat:
     
     def kinematics(self,dt,model):
         """updates kinematics"""
+        #calc the forward speed
+        direction = atan2(self.vy,self.vx)
+        speed = norm([self.vx,self.vy])
+        self.forward_speed = cos(direction-self.heading)*speed #as it accelerates, log aspect diminishes
+        
+        #rudder torque aspect
+        Tr = -self.kw*log(abs(self.forward_speed)+1)*self.RudderPos #all of these ratios are made up 
+        
+        #sail torque aspect
+        Ts = self.q*self.strength_Main*sin(model.relwindcomp-self.heading+self.MainPos)
+        Ts+=-self.q*self.strength_Jib*sin(model.relwindcomp-self.heading+self.JibPos)
+ 
 
+        #log torque aspect?
+                
+        self.angularVelocity += sign(self.angularVelocity)*-self.angularVelocity**2*self.lambda_2*dt #effectively drag
+        self.angularVelocity += Tr*dt
+        self.angularVelocity += Ts*dt
         
         #forward sail aspect
         Sr = shadow_ratio(model.relwindcomp)
@@ -143,7 +172,8 @@ def shadow_ratio(relwindcomp):
         
 def drag_ratio(RudderPos):
     """coefficient on velocity from the drag given the rudder pos"""
-    return 1 - 0.9*sin(abs(RudderPos)) #given current state, this means that at pi/4, effectively 1/4 as fast (1-0.9*sin(1))
+#    return 1 - 0.9*sin(abs(RudderPos)) #given current state, this means that at pi/4, effectively 1/4 as fast (1-0.9*sin(1))
+    return 1 - 0.9*sin(abs(RudderPos*pi/2.0))
     
 class PyGameWindowView:
     """encodes view of simulation"""
@@ -161,13 +191,17 @@ class PyGameWindowView:
         pygame.display.update()
     
     def draw_boat(self,boat):
-        bow = (boat.xpos+boat.length/2.0*cos(boat.heading),boat.ypos+boat.length/2.0*sin(boat.heading))
-        starboard_stern = (boat.xpos+boat.length/2.0*cos(boat.heading+pi*5.0/6),boat.ypos+boat.length/2.0*sin(boat.heading+pi*5.0/6))
-        port_stern = (boat.xpos+boat.length/2.0*cos(boat.heading+pi*7.0/6),boat.ypos+boat.length/2.0*sin(boat.heading+pi*7.0/6))
-        pygame.draw.line(self.screen, boat.color, bow, starboard_stern, 3)
-        pygame.draw.line(self.screen, boat.color, bow, port_stern, 2)
-        pygame.draw.line(self.screen, boat.color, starboard_stern, port_stern, 1)
-        if boat.wind_over_port:
+        try:
+            bow = (boat.xpos+boat.length/2.0*cos(boat.heading),boat.ypos+boat.length/2.0*sin(boat.heading))
+            starboard_stern = (boat.xpos+boat.length/2.0*cos(boat.heading+pi*5.0/6),boat.ypos+boat.length/2.0*sin(boat.heading+pi*5.0/6))
+            port_stern = (boat.xpos+boat.length/2.0*cos(boat.heading+pi*7.0/6),boat.ypos+boat.length/2.0*sin(boat.heading+pi*7.0/6))
+            pygame.draw.line(self.screen, boat.color, bow, starboard_stern, 3)
+            pygame.draw.line(self.screen, boat.color, bow, port_stern, 2)
+            pygame.draw.line(self.screen, boat.color, starboard_stern, port_stern, 1)
+        except:
+            print boat.heading
+            print boat.angularVelocity
+        if boat.wind_over_port:  #non-intuitive reversal needs to be explained
             switch = -1
         else:
             switch = 1
@@ -179,9 +213,6 @@ class PyGameWindowView:
         rudder_end = (rudder_origin[0]-boat.length/3.0*cos(boat.heading+boat.RudderPos*pi/4.0),rudder_origin[1]-boat.length/3.0*sin(boat.heading+boat.RudderPos*pi/4.0))
         pygame.draw.line(self.screen, (0,0,0), rudder_origin, rudder_end, 3)
 
-        
-#        pygame.draw.rect(self.screen,pygame.Color(boat.color[0],boat.color[1],boat.color[2]),pygame.Rect(boat.xpos,boat.ypos,boat.length*2,boat.length))
-
     def draw_wind_vane(self,wind):
         origin = (30,30)
         dest = (30+(4+wind.windspeed)*cos(wind.windheading),30+(4+wind.windspeed)*sin(wind.windheading))
@@ -192,8 +223,8 @@ class PyGameWindowView:
         """displays the relwind next to the wind vane"""
         myfont = pygame.font.SysFont("monospace", 12, bold = True)
         text = myfont.render("Relative Wind: "+str(self.model.relwind), 1, (0,0,0))
-        text_2 = myfont.render("Relative Wind Comp: "+str(self.model.relwindcomp), 1, (0,0,0))
-        text_3 = myfont.render("Main Pos: "+str(self.model.boat1.MainPos), 1, (0,0,0))
+        text_2 = myfont.render("Boat angularVelocity: "+str(self.model.boat1.angularVelocity), 1, (0,0,0))
+        text_3 = myfont.render("Boat Heading: "+str(self.model.boat1.heading), 1, (0,0,0))
         self.screen.blit(text, (100,20))
         self.screen.blit(text_2, (100, 40))
         self.screen.blit(text_3, (100, 60))
