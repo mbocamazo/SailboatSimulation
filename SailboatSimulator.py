@@ -6,12 +6,12 @@ Created on Mon Apr 21 00:43:25 2014
 """
 
 import pygame
-#from pygame.locals import *
-#from random import *
+from pygame.locals import *
+from random import *
 import math
 from math import atan2, degrees, pi, sin, cos, radians
 import time
-#import numpy as np
+import numpy as np
 
 class WorldModel:
     """encodes simulator world state"""
