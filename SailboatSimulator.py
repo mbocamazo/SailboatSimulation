@@ -125,6 +125,7 @@ class Boat:
         #sail torque aspect
         Ts = -self.q*self.strength_Main*sin(self.main_angle-model.wind.windheading)*sqrt(model.wind.windspeed)
         Ts = self.q*self.strength_Jib*sin(self.jib_angle-model.wind.windheading)*sqrt(model.wind.windspeed)
+        #this overwrite is an error and needs to be addressed, however, it works decently with it.
 
         #log torque aspect?
         
