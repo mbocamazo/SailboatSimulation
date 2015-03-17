@@ -2,14 +2,17 @@
 """
 Created on Mon Apr 21 00:43:25 2014
 
-@author: atproofer
+@author: mbocamazo
+Last updated: 2015/03/17
+Current shortcomings:
+sail torque, drag model equations
 """
 
 import pygame
 from pygame.locals import *
 from random import *
 import math
-from math import atan2, degrees, pi, sin, cos, radians
+from math import atan2, degrees, pi, sin, cos, radians, sqrt
 import time
 import numpy as np
 
@@ -78,7 +81,7 @@ class Boat:
         self.kw = 0.3 #angular velocity scaling for the torque from the rudder
         self.q = 1 #ang vel scaling for torque from the scales
         
-        self.disp_k =1 #scaling for the output
+        self.disp_k =0.25 #scaling for the output
         
     def update(self,dt,model):
         self.heading = self.heading % (2.0*pi) #sanitization
@@ -116,19 +119,19 @@ class Boat:
         """updates kinematics"""
         #calc the forward speed
         direction = atan2(self.vy,self.vx)
-        speed = norm([self.vx,self.vy])
+        speed = np.linalg.norm([self.vx,self.vy])
         self.forward_speed = cos(direction-self.heading)*speed #as it accelerates, log aspect diminishes
         
         #rudder torque aspect
-        Tr = -self.kw*log(abs(self.forward_speed)+1)*self.RudderPos #all of these ratios are made up 
+        Tr = -self.kw*math.log(abs(self.forward_speed)+1)*self.RudderPos #all of these ratios are made up 
         
         #sail torque aspect
-        Ts = -self.q*self.strength_Main*sin(self.main_angle-model.wind.windheading)*sqrt(model.wind.windspeed)
-        Ts = self.q*self.strength_Jib*sin(self.jib_angle-model.wind.windheading)*sqrt(model.wind.windspeed)
+        Ts = -self.q*self.strength_Main*sin(self.main_angle-model.wind.windheading)*abs((model.wind.windspeed))
+        Ts = self.q*self.strength_Jib*sin(self.jib_angle-model.wind.windheading)*abs(sqrt(model.wind.windspeed))
 
         #log torque aspect?
         
-        angular_drag = -sign(self.angularVelocity)*self.angularVelocity**2*self.lambda_2 #effectively drag
+        angular_drag = -np.sign(self.angularVelocity)*self.angularVelocity**2*self.lambda_2 #effectively drag
         self.angularVelocity += angular_drag*dt
         self.angularVelocity += Tr*dt
         self.angularVelocity += Ts*dt
@@ -215,7 +218,7 @@ class PyGameWindowView:
         pygame.draw.line(self.screen, (0,255,0), (boat.xpos,boat.ypos), main_end, 2)
         jib_end = (bow[0]-boat.length/3.0*cos(boat.heading+boat.JibPos*pi/2.0*switch),bow[1]-boat.length/3.0*sin(boat.heading+boat.JibPos*pi/2.0*switch))
         pygame.draw.line(self.screen, (0,255,0), bow, jib_end, 2)
-        rudder_origin = (mean((starboard_stern[0],port_stern[0])),mean((starboard_stern[1],port_stern[1])))
+        rudder_origin = (np.mean((starboard_stern[0],port_stern[0])),np.mean((starboard_stern[1],port_stern[1])))
         rudder_end = (rudder_origin[0]-boat.length/3.0*cos(boat.heading+boat.RudderPos*pi/4.0),rudder_origin[1]-boat.length/3.0*sin(boat.heading+boat.RudderPos*pi/4.0))
         pygame.draw.line(self.screen, (0,0,0), rudder_origin, rudder_end, 3)
         boat.main_angle = atan2(main_end[1]-boat.ypos,main_end[0]-boat.xpos)
